@@ -58,7 +58,7 @@ h2{font:600 1.15rem/1.25 var(--display);margin:0;text-wrap:balance}
 .label{font:500 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 
 /* buttons */
-.btn{appearance:none;border:0;border-radius:12px;padding:15px 18px;font:600 15px var(--body);cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s, opacity .2s}
+.btn{position:relative;z-index:1;-webkit-appearance:none;appearance:none;border:0;border-radius:12px;padding:15px 18px;font:600 15px var(--body);cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s, opacity .2s}
 .btn:active{transform:scale(.98)}
 .btn:focus-visible{outline:3px solid var(--role);outline-offset:3px}
 .btn-primary{background:var(--role);color:var(--on-accent)}
@@ -69,7 +69,13 @@ h2{font:600 1.15rem/1.25 var(--display);margin:0;text-wrap:balance}
 .choices{display:grid;gap:10px;margin-top:4px}
 
 /* investor card */
-.deck{perspective:1100px;width:100%;max-width:100%;aspect-ratio:4/5;max-height:380px;margin-inline:auto}
+.deck{perspective:1100px;width:min(100%, 300px, 50vh);width:min(100%, 300px, 50svh);aspect-ratio:4/5;max-width:100%;margin-inline:auto;isolation:isolate}
+/* after the flip, drop the 3D layers so Safari repaints the page normally */
+.deck.flipped.settled .card{transform:none;transition:none;transform-style:flat}
+.deck.settled .back{display:none}
+.deck.flipped.settled .front{transform:none}
+/* the main action stays pinned to the bottom of the screen on small phones */
+.cta{position:-webkit-sticky;position:sticky;bottom:0;z-index:5;display:grid;gap:10px;padding-top:16px;padding-bottom:calc(10px + env(safe-area-inset-bottom, 0px));background:linear-gradient(to bottom, transparent, var(--bg) 16px)}
 .card{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .9s cubic-bezier(.3,.7,.2,1)}
 .deck.flipped .card{transform:rotateY(180deg)}
 .face{position:absolute;inset:0;border-radius:18px;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden}
@@ -80,7 +86,7 @@ h2{font:600 1.15rem/1.25 var(--display);margin:0;text-wrap:balance}
 .back-mark span{font:500 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;opacity:.7}
 .front{transform:rotateY(180deg);background:var(--role);color:var(--on-accent);padding:22px;display:flex;flex-direction:column;justify-content:space-between}
 .front .kind{font:500 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;opacity:.85}
-.front .who{font:700 2.1rem/1.02 var(--display);margin-top:8px}
+.front .who{font:700 1.9rem/1.02 var(--display);margin-top:8px}
 .front .sub{opacity:.9;margin-top:6px;font-size:14px}
 .front .cash{font:600 2.4rem/1 var(--display);font-variant-numeric:tabular-nums}
 .front .odds{display:flex;gap:5px;margin-top:10px}
@@ -200,8 +206,7 @@ svg.chart{width:100%;height:auto;display:block;overflow:visible}
       </div>
     </div>
     <div class="locked-note" id="lockedNote" hidden></div>
-    <button class="btn btn-primary" id="drawBtn">Draw my card</button>
-    <button class="btn btn-primary" id="goInfo" hidden>See the deal</button>
+    <div class="cta"><button class="btn btn-primary" id="mainBtn">Draw my card</button></div>
   </section>
 
   <!-- 2. The deal -->
@@ -297,8 +302,8 @@ const existing = load();
 if (existing === 'public' || existing === 'private') {
   state.role = existing;
   renderCard(); applyRole();
-  $('#deck').classList.add('flipped');
-  $('#drawBtn').hidden = true; $('#goInfo').hidden = false;
+  $('#deck').classList.add('flipped', 'settled');
+  toDeal();
   $('#lockedNote').innerHTML = I.lock + 'You already drew this card. It stays with you.';
   $('#lockedNote').hidden = false;
 }
@@ -308,15 +313,21 @@ async function draw(){
   state.role = FORCED || (Math.random() < 0.2 ? 'private' : 'public');
   save(state.role);
   renderCard();
-  $('#drawBtn').disabled = true;
+  $('#mainBtn').disabled = true;
   $('#deck').classList.add('flipped');
   await sleep(950);
+  $('#deck').classList.add('settled');
   applyRole();
-  $('#drawBtn').hidden = true; $('#goInfo').hidden = false;
+  toDeal();
 }
-$('#drawBtn').addEventListener('click', draw);
+function toDeal(){
+  const b = $('#mainBtn');
+  b.disabled = false;
+  b.innerHTML = 'See the deal' + I.arrow;
+  b.onclick = () => { buildInfo(); show('s-info'); };
+}
+$('#mainBtn').onclick = draw;
 $('#deck').addEventListener('click', draw);
-$('#goInfo').addEventListener('click', () => { buildInfo(); show('s-info'); });
 
 /* ---------- 2. the deal ---------- */
 let tickTimer = null;
@@ -343,7 +354,7 @@ function buildInfo(){
           <div class="row">Dividend yield<b>1.8%</b></div>
         </div>
       </div>
-      <div class="choices">
+      <div class="choices cta">
         <button class="btn btn-primary" id="yes">Buy ${fmt(CAPITAL.public)} of shares</button>
         <button class="btn btn-ghost" id="no">Keep it in the bank <small>(2%)</small></button>
       </div>`;
@@ -368,7 +379,7 @@ function buildInfo(){
         <div class="label">What you hear</div>
         <div class="whispers" id="whispers"></div>
       </div>
-      <div class="choices">
+      <div class="choices cta">
         <button class="btn btn-primary" id="yes">Invest ${fmt(CAPITAL.private)} <small>(locked until exit)</small></button>
         <button class="btn btn-ghost" id="no">Pass, keep it in the bank <small>(2%)</small></button>
       </div>`;
@@ -459,7 +470,7 @@ function simShell(title, sub){
     <div class="clock" id="clk"></div>
     <svg class="chart" id="ch" viewBox="0 0 ${W} ${H}"></svg>
     <ul class="events" id="ev"></ul>
-    <button class="btn btn-primary" id="act"></button>`;
+    <div class="cta"><button class="btn btn-primary" id="act"></button></div>`;
 }
 
 function setVal(v, start){
@@ -618,7 +629,7 @@ function showResult(){
     </div>
     <p class="verdict">${R.verdict}</p>
     <p class="lede">${R.sub}</p>
-    <button class="btn btn-primary" id="toReveal">See the other side${I.arrow}</button>`;
+    <div class="cta"><button class="btn btn-primary" id="toReveal">See the other side${I.arrow}</button></div>`;
   show('s-result');
   $('#toReveal').addEventListener('click', showReveal);
 }
